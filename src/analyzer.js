@@ -4,10 +4,6 @@ var utils = require("./utils.js");
 
 
 
-/**
- * Cross browser OfflineAudioContext
- */
-const OfflineAudioContext = window && (window.OfflineAudioContext || window.webkitOfflineAudioContext);
 
 
 
@@ -18,6 +14,14 @@ const OfflineAudioContext = window && (window.OfflineAudioContext || window.webk
 const analyzer = {};
 
 
+analyzer.init = function () {
+  /**
+   * Cross browser OfflineAudioContext
+   */
+  this.OfflineAudioContext = window && (window.OfflineAudioContext || window.webkitOfflineAudioContext);
+
+}
+
 
 /**
  * Apply a low pass filter to an AudioBuffer
@@ -25,9 +29,9 @@ const analyzer = {};
  * @return {AudioBufferSourceNode}
  */
 
-analyzer.getLowPassSource = function (buffer, OfflineContext = OfflineAudioContext) {
+analyzer.getLowPassSource = function (buffer) {
   const {length, numberOfChannels, sampleRate} = buffer;
-  const context = new OfflineContext(numberOfChannels, length, sampleRate);
+  const context = new this.OfflineAudioContext(numberOfChannels, length, sampleRate);
 
   /**
    * Create buffer source
@@ -202,7 +206,7 @@ analyzer.groupByTempo = function (sampleRate) {
     intervalCounts.forEach(intervalCount => {
       if (intervalCount.interval !== 0) {
 
-        intervalCount.interval = Math.abs(intervalCount.interval); 
+        intervalCount.interval = Math.abs(intervalCount.interval);
 
         /**
          * Convert an interval to tempo
@@ -255,5 +259,4 @@ analyzer.groupByTempo = function (sampleRate) {
 /**
  * Export utils function container
  */
-
 module.exports = analyzer;

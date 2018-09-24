@@ -16,7 +16,7 @@ const utils = {};
  * @return {Mixed}             Return of 'callback' function
  */
 
-utils.loopOnThresolds = function (onLoop, minValidThresold, callback) {
+utils.loopOnThresolds = (onLoop, minValidThresold, callback) => {
 
   /**
    * Top starting value to check peaks
@@ -28,13 +28,14 @@ utils.loopOnThresolds = function (onLoop, minValidThresold, callback) {
    * Minimum value to check peaks
    */
 
-  if (typeof minValidThresold == 'function' || typeof minValidThresold == 'boolean') {
-    callback = minValidThresold || callback;
-    minValidThresold = 0.30;
-  }
-  if (typeof minValidThresold == 'undefined') minValidThresold = 0.30;
+  if (typeof minValidThresold == 'function' 
+   || typeof minValidThresold == 'undefined') {
 
-  const minThresold = minValidThresold;
+    callback = minValidThresold || callback;
+
+    minValidThresold = 0.30;
+  
+  }
 
   /**
    * Optionnal object to store data
@@ -48,12 +49,12 @@ utils.loopOnThresolds = function (onLoop, minValidThresold, callback) {
 
   do {
     let stop = false;
-    thresold = thresold - 0.05;
-    onLoop(object, thresold, function (bool) {
+    thresold -= 0.05;
+    onLoop && onLoop(object, thresold, (bool) => {
       stop = bool;
     });
     if (stop) break;
-  } while (thresold > minThresold);
+  } while (thresold > minValidThresold);
 
   /**
    * Ended callback
@@ -64,16 +65,51 @@ utils.loopOnThresolds = function (onLoop, minValidThresold, callback) {
 
 
 /**
+ * Real clone an object
+ * @param  {Object} object Contain an object without recusive entries.
+ * @return {Object}        Cloned object
+ */
+
+utils.clone = (object) => {
+
+  /**
+   * Use JSON to duplicate a Javascript Object
+   */
+
+  return JSON.parse(JSON.stringify(object));
+
+};
+
+
+
+/**
  * Generate an object with each keys (thresolds) with a defaultValue
  * @param  {Mixed}  defaultValue Contain the înitial value for each thresolds
  * @return {Object}              Object with thresolds key initialized with a defaultValue
  */
 
-utils.generateObjectModel = function (defaultValue, callback) {
+utils.generateObjectModel = (defaultValue, callback) => {
+
+  /**
+   * Loop on thresolds to build an object with thresolds keys and valued with the defaultValue
+   */
+
   return utils.loopOnThresolds((object, thresold) => {
-    object[thresold.toString()] = JSON.parse(JSON.stringify(defaultValue));
+
+    /**
+     * Add the thresold as key and clone the defaultValue to not assign the same object id.
+     */
+
+    object[thresold.toString()] = utils.clone(defaultValue);
+
   }, (object) => {
-    return callback && callback(JSON.parse(JSON.stringify(object))) || object;
+
+    /**
+     * Return a callback or the object (asyn|sync)
+     */
+
+    return callback && callback(utils.clone(object)) || object;
+
   });
 }
 

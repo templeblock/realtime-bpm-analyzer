@@ -18,9 +18,9 @@ const analyzer = {};
  * @return {AudioBufferSourceNode}
  */
 
-analyzer.getLowPassSource = function (buffer, OfflineContext) {
+analyzer.getLowPassSource = function (buffer, OfflineAudioContext) {
   const {length, numberOfChannels, sampleRate} = buffer;
-  const context = new OfflineContext(numberOfChannels, length, sampleRate);
+  const context = new OfflineAudioContext(numberOfChannels, length, sampleRate);
 
   /**
    * Create buffer source
@@ -58,7 +58,7 @@ analyzer.getLowPassSource = function (buffer, OfflineContext) {
  * @return {Array}             Peaks found that are grater than the thresold
  */
 
-analyzer.findPeaksAtThresold = function (data, thresold, offset = 0, callback) {
+analyzer.findPeaksAtThresold = function (data, thresold, offset, callback) {
   let peaks = [];
 
   /**

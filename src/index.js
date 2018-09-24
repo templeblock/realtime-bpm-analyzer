@@ -29,7 +29,7 @@ class RealTimeBPMAnalyzer {
         numberOfOutputChannels: 1
       },
       continuousAnalysis: false,
-      stabilizedBpmCount: 2000,
+      muteAnalysisAtIntervalCount: 2000,
       computeBPMDelay: 10000,
       stabilizationTime: 20000,
       pushTime: 2000,
@@ -101,7 +101,7 @@ class RealTimeBPMAnalyzer {
      * Number / Position of chunks
      */
 
-    this.chunkCoeff = 1;
+    this.chunkCount = 1;
 
 
   }
@@ -112,10 +112,21 @@ class RealTimeBPMAnalyzer {
    * @param  {Float} minThresold Value between 1 and 0
    */
   clearValidPeaks (minThresold) {
-    console.log('[clearValidPeaks] function: under', minThresold)
+
+    console.log('[clearValidPeaks] function: under', minThresold);
+
+    /**
+     * Set (to down) the minValidThresold to limit the recording of new peaks
+     */
+    
     this.minValidThresold = minThresold.toFixed(2);
 
     utils.loopOnThresolds((object, thresold) => {
+
+      /**
+       * Remove 'useless' datas under the minThresold.
+       */
+
       if (thresold < minThresold) {
         delete this.validPeaks[thresold];
         delete this.nextIndexPeaks[thresold];
@@ -123,19 +134,15 @@ class RealTimeBPMAnalyzer {
     });
   }
 
-
-
-
-
   /**
-   * Attach this function to an audioprocess event on a audio/video node to compute BPM / Tempo in realtime
+   * [evaluateValidPeaks description]
+   * @param  {[type]} thresold        [description]
+   * @param  {[type]} channelData     [description]
+   * @param  {[type]} currentMaxIndex [description]
+   * @return {[type]}                 [description]
    */
-  analyze (event) {
-    /**
-     * Compute the maximum index with all previous chunks
-     * @type {integer}
-     */
-    const currentMaxIndex = this.options.scriptNode.bufferSize * this.chunkCoeff;
+  
+  evaluateValidPeaks (thresold, channelData, currentMaxIndex) {
 
     /**
      * Compute the minimum index with all previous chunks
@@ -144,86 +151,232 @@ class RealTimeBPMAnalyzer {
     const currentMinIndex = currentMaxIndex - this.options.scriptNode.bufferSize;
 
     /**
+     * Are we authorized to detect a peak at this chunk ?
+     */
+
+    if (this.nextIndexPeaks[thresold] < currentMaxIndex) {
+
+      /**
+       * Get the offset on the current chunk datas
+       */
+
+      const offsetForNextPeak = this.nextIndexPeaks[thresold] % 4096; // 0 - 4095
+
+      analyzer.findPeaksAtThresold(channelData, thresold, offsetForNextPeak, (peaks, atThresold) => {
+        
+        /**
+         * Test if we have detected peaks
+         */
+
+        if (typeof(peaks) != 'undefined' && peaks != undefined) {
+          Object.keys(peaks).forEach((key) => {
+            if (typeof peaks[key] != 'undefined') {
+
+              /**
+               * Add if the 'relative' index peak to the validPeaks Object and update the nextIndexPeaks 
+               * (10000 indexes = 1/4s muting)
+               */
+
+              this.nextIndexPeaks[atThresold] = currentMinIndex + peaks[key] + 10000;
+              this.validPeaks[atThresold].push(currentMinIndex + peaks[key]);
+
+            }
+          });
+        }
+      });
+    }
+
+  }
+
+  /**
+   * Stop all (we have enougth interval counts)
+   * @param  {[type]} err [description]
+   * @param  {[type]} bpm [description]
+   * @return {[type]}     [description]
+   */
+  
+  muteAnalyzer (err, bpm) {
+
+    console.log('[freezePushBack]');
+
+    /**
+     * Stop the push callback function
+     */
+
+    this.waitPushTime = 'never';
+
+    /**
+     * Set extra scope value to record any peaks
+     */
+
+    this.minValidThresold = 1.1;
+
+  }
+
+
+
+  /**
+   * [stabilizeBPM description]
+   * @param  {[type]} timeout [description]
+   * @return {[type]}         [description]
+   */
+  
+  stabilizeBPM (timeout) {
+
+    console.log('[onBpmStabilized] function: Fired !');
+        
+    this.options.onBpmStabilized(thresold);
+
+    // After x milliseconds, we reinit the analyzer
+    if (this.options.continuousAnalysis) {
+    
+      clearTimeout(this.waitStabilization);
+    
+      this.waitStabilization = timeout;
+    }
+  }
+
+
+
+  /**
+   * [reloadAnalyzer description]
+   * @return {[type]} [description]
+   */
+  
+  reloadAnalyzer () {
+  
+    console.log('[waitStabilization] setTimeout: Fired !');
+
+    /**
+     * Reduce this value to zero after the first iteration because of this next reload of the options
+     */
+
+    this.options.computeBPMDelay = 0;
+
+    /**
+     * Reset initial value to options
+     */
+
+    this.initClass();
+
+  }
+
+
+
+  /**
+   * [computeData description]
+   * @return {[type]} [description]
+   */
+  
+  computeData () {
+    /**
+     * Counting time over pushes
+     */
+
+    this.cumulatedPushTime += this.options.pushTime;
+
+
+    /**
+     * Compute bpm by testing intervals etc on validPeaks
+     */
+
+    analyzer.computeBPM(this.validPeaks, event.inputBuffer.sampleRate, (err, bpm, thresold) => {
+      
+      /**
+       * Push Datas with the callback function
+       */
+
+      this.options.pushCallback(err, bpm, thresold);
+
+      /**
+       * Mute analizer (if we have enougth interval counts)
+       */
+      
+      if (!err && (bpm && bpm[0].count >= this.options.muteAnalysisAtIntervalCount)) {
+      
+        this.muteAnalyzer();
+
+      }
+
+      /**
+       * Stabilize BPM by increment the minThresold and
+       * clear 'useless' data and/or reload analyzer deplyed by the last stabilisation
+       */
+
+      if (this.cumulatedPushTime >= this.options.computeBPMDelay && this.minValidThresold < thresold) {
+        
+        this.stabilizeBPM(setTimeout(() => {
+    
+          this.reloadAnalyzer();
+      
+        }, this.options.stabilizationTime));
+
+      }
+    });
+  }
+
+
+  /**
+   * Attach this function to an audioprocess event on a audio/video node to compute BPM / Tempo in realtime
+   */
+  
+  analyze (event) {
+    /**
+     * Compute the maximum index with all previous chunks
+     * @type {integer}
+     */
+    const currentMaxIndex = this.options.scriptNode.bufferSize * this.chunkCount;
+
+    /**
      * Apply a low pass filter to the buffer
      * @type {integer}
      */
     const source = analyzer.getLowPassSource(event.inputBuffer, this.options.webAudioAPI.OfflineAudioContext);
+    
+    /**
+     * Force the source to start at the begin
+     */
     source.start(0);
 
     utils.loopOnThresolds((object, thresold) => {
 
-      if (this.nextIndexPeaks[thresold] < currentMaxIndex) {
-        // Get the next index in the next chunk
-        const offsetForNextPeak = this.nextIndexPeaks[thresold] % 4096; // 0 - 4095
-        // Get peaks sort by tresold
-        analyzer.findPeaksAtThresold(source.buffer.getChannelData(0), thresold, offsetForNextPeak, (peaks, atThresold) => {
-          // Loop over peaks
-          if (typeof(peaks) != 'undefined' && peaks != undefined) {
-            Object.keys(peaks).forEach((key) => {
-              // If we got some data..
-              const relativeChunkPeak = peaks[key];
+      /**
+       * Try to detect a valids peaks at the specified thresold
+       */
 
-              if (typeof(relativeChunkPeak) != 'undefined') {
-                // Add current Index + 10K
-                this.nextIndexPeaks[atThresold] = currentMinIndex + relativeChunkPeak + 10000;
-                // Store valid relativeChunkPeak
-                this.validPeaks[atThresold].push(currentMinIndex + relativeChunkPeak);
-              }
-            });
-          }
-        });
-      }
+      this.evaluateValidPeaks(thresold, source.buffer.getChannelData(0), currentMaxIndex);
+
     }, this.minValidThresold, () => {
 
-      // Refresh BPM every 2s (default value)
+      /**
+       * Execute a push callbacked function to send datas
+       */
+      
       if (this.waitPushTime === null) {
+
         this.waitPushTime = setTimeout(() => {
-          this.cumulatedPushTime += this.options.pushTime;
+
           this.waitPushTime = null;
-          analyzer.computeBPM(this.validPeaks, event.inputBuffer.sampleRate, (err, bpm, thresold) => {
-            this.options.pushCallback(err, bpm, thresold);
 
-            // if (err) console.log(err);
+          /**
+           * Execute the push function container
+           */
 
-            // Stop all (we have enougth interval counts)
-            // Never executed !
-            if (!err && bpm) {
-              if (bpm[0].count >= this.options.stabilizedBpmCount) {
-                console.log('[freezePushBack]');
-                // Freeze pushPack periodicity
-                this.waitPushTime = 'never';
-                // Cancel the audioprocess
-                this.minValidThresold = 1;
-              }
-            }
-
-            if (this.cumulatedPushTime >= this.options.computeBPMDelay
-             && this.minValidThresold < thresold
-            ) {
-              console.log('[onBpmStabilized] function: Fired !');
-              this.options.onBpmStabilized(thresold);
-
-              // After x milliseconds, we reinit the analyzer
-              if (this.options.continuousAnalysis) {
-                clearTimeout(this.waitStabilization);
-                this.waitStabilization = setTimeout(() => {
-                  console.log('[waitStabilization] setTimeout: Fired !');
-                  this.options.computeBPMDelay = 0;
-                  this.initClass();
-                }, this.options.stabilizationTime);
-              }
-
-            }
-          });
+          this.computeData();
+  
         }, this.options.pushTime);
+
+        /**
+         * Couting chunks
+         */
+        
+        this.chunkCount++;
       }
-
-      // Increment chunk
-      this.chunkCoeff++;
-
     });
   }
 }
+
+
 
 // Export
 module.exports = RealTimeBPMAnalyzer;

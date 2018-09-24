@@ -5,11 +5,12 @@
  */
 import chai from "chai";
 let expect = chai.expect;
-import utils from "./../src/utils";
+
+import utilsTests from "./_utils.js";
 import analyzer from "./../src/analyzer";
 const wae = require("web-audio-engine");
 const AudioBuffer = require("web-audio-engine").AudioBuffer;
-const WavDecoder = require("wav-decoder");
+const fs = require("fs");
 
 /**
  * Unit test for the RealTime BPM Analyzer
@@ -17,162 +18,127 @@ const WavDecoder = require("wav-decoder");
 
 describe('RealTime BPM Analyzer', () => {
 
-  /**
-   * Test Utility functions
-   */
-
-  describe('Utils.loopOnThresolds', () => {
-
-    it('Test thresold value with stop call', (done) => {
-      utils.loopOnThresolds((object, thresold, stop) => {
-        // We add an entry to object
-        object.foo = thresold;
-        // Stop the loop at first iteration
-        stop(true);
-      }, (object) => {
-        // Check if object have only ONE entry
-        expect(JSON.stringify(object)).to.be.equal('{"foo":0.8999999999999999}');
-        done();
-      });
-    });
-
-    it('Test thresold value with boolean', (done) => {
-      utils.loopOnThresolds((object, thresold, stop) => {
-        // We add an entry to object
-        object.foo = thresold;
-        // Stop the loop at first iteration
-        stop(true);
-      }, false, (object) => {
-        expect(JSON.stringify(object)).to.be.equal('{"foo":0.8999999999999999}');
-        done();
-      });
-    });
-
-    it('Test thresold without minThresold', (done) => {
-      utils.loopOnThresolds((object, thresold, stop) => {
-      	// We add an entry to object
-      	object[thresold] = thresold;
-      });
-      const wait = setTimeout(() => {
-        done();
-      });
-    });
-
-    it('Test callback (second param) without onLoop', (done) => {
-      utils.loopOnThresolds(() => {}, (object) => {
-      	expect(JSON.stringify(object)).to.be.equal('{}');
-      	done();
-      });
-    });
-
-    it('Test Object Model generation', (done) => {
-      utils.generateObjectModel(false, (object) => {
-      	expect(JSON.stringify(object)).to.be.not.equal('{}');
-      	done();
-      });
-    });
-  });
-
+  utilsTests();
 
   /**
    * Test Analyzer functions
+      getLowPassSource
+      findPeaksAtThresold
+      computeBPM
+      getTopCandidates
+      identifyIntervals
+      groupByTempo
    */
+  
 
-  describe('Analyzer', () => {
-	  it('Test low pass filter applying', (done) => {
-      const AudioContext = require("web-audio-engine").StreamAudioContext;
-      var audioContext = new AudioContext();
-      // Create an empty three-second stereo buffer at the sample rate of the AudioContext
-      var buffer = audioContext.createBuffer(2, audioContext.sampleRate * 3, audioContext.sampleRate);
-      // Fill the buffer with white noise;
-      // just random values between -1.0 and 1.0
-      for (var channel = 0; channel < buffer.numberOfChannels; channel++) {
-        // This gives us the actual array that contains the data
-        var nowBuffering = buffer.getChannelData(channel);
-        for (var i = 0; i < buffer.length; i++) {
-          // Math.random() is in [0; 1.0]
-          // audio needs to be in [-1.0; 1.0]
-          nowBuffering[i] = Math.random() * 2 - 1;
-        }
-      }
 
-      expect(buffer.constructor.name).to.be.equal('AudioBuffer');
-      const OfflineAudioContext = require("web-audio-engine").OfflineAudioContext;
-      const source = analyzer.getLowPassSource(buffer, OfflineAudioContext);
-      expect(source.buffer.constructor.name).to.be.equal('AudioBuffer');
-      done();
+  const _getFixtureAudioBuffer = (callback) => {
+
+    /**
+     * Instanciate an audioContext
+     */
+    
+    const AudioContext = wae.RenderingAudioContext;
+    const context = new AudioContext();
+
+
+    fs.readFile(__dirname + "/fixtures/bass-test.wav", (err, buffer) => {
+      if (err) console.log(err);
+
+      /**
+       * Get AudioBuffer from buffer
+       */
+
+      context.decodeAudioData(buffer).then((audioBuffer) => {
+
+        callback && callback(null, audioBuffer, buffer);
+
+      })
+
     });
+  }
 
 
-    const passLowPassFilter = (callback) => {
 
-      wae.decoder.set("wav", WavDecoder);
+  describe('CBA - _getFixtureAudioBuffer', () => {
 
-      const fs = require("fs");
-      const AudioContext = require("web-audio-engine").RenderingAudioContext;
-      const context = new AudioContext();
-      const audioData = fs.readFile(__dirname + "/fixtures/bass-test.wav", (err, buffer) => {
+	  it('Should test the fixture (bass-test.wav) with _getFixtureAudioBuffer()', (done) => {
+      
+      _getFixtureAudioBuffer((err, audioBuffer) => {
+
         if (err) console.log(err);
 
-        context.decodeAudioData(buffer).then((audioBuffer) => {
+        expect(audioBuffer.length).to.be.equal(338688);
+        expect(audioBuffer.sampleRate).to.be.equal(44100);
+        expect(audioBuffer.constructor.name).to.be.equal('AudioBuffer');
 
-          expect(audioBuffer.constructor.name).to.be.equal('AudioBuffer');
-
-          const OfflineAudioContext = require("web-audio-engine").OfflineAudioContext;
-          const source = analyzer.getLowPassSource(audioBuffer, OfflineAudioContext);
-
-          expect(source.buffer.constructor.name).to.be.equal('AudioBuffer');
-
-          callback && callback(source);
-        }).catch((err) => {
-          callback && callback(null, err);
-        });
-
+        done();
       });
-    }
+
+    });
+  
+  });
+
+  
+
+  describe('CBA - Analyzer.getLowPassSource', () => {
 
 
+    it('Should test self execution of getLowPassSource', (done) => {
+      
+      _getFixtureAudioBuffer((err, audioBuffer, buffer) => {
+        if (err) console.log(err);
 
-    it('Test lowpass filter', (done) => {
-      passLowPassFilter((soruce, err) => {
-        if (err) {
-          done(err);
-        } else {
-          done();
-        }
+        const OfflineAudioContext = wae.OfflineAudioContext;
+        const source = analyzer.getLowPassSource(buffer, OfflineAudioContext);
+
+        source.start(0);
+
+        done();
       });
+
     });
 
 
-    it('Test lowpass filter + findPeaksAtThresold', (done) => {
-      passLowPassFilter((source, err) => {
-        if (err) done(err);
 
-        const thresold = 0.80;
-        const offset = 0;
+    it('Should detect differences between original and lowered fixture', (done) => {
 
-        analyzer.findPeaksAtThresold(source.buffer.getChannelData(0), thresold, offset, (peaks, returnedThresold) => {
-          expect(peaks.length).to.be.not.equal(0);
-          expect(thresold).to.be.equal(returnedThresold);
-          done();
+      const OfflineAudioContext = wae.OfflineAudioContext;
+
+      _getFixtureAudioBuffer((err, audioBufferOriginal, bufferOriginal) => {
+
+        _getFixtureAudioBuffer((err, audioBuffer, buffer) => {
+
+          if (err) console.log(err);
+          
+          let source = analyzer.getLowPassSource(audioBuffer, OfflineAudioContext);
+
+          source.start(0);
+
+          audioBufferOriginal = audioBufferOriginal.getChannelData(0);
+          source = source.buffer.getChannelData(0);
+
+          let isEqual = true;
+          const audioBufferLength = audioBuffer.length;
+          for (var o = 0; o < audioBufferLength; o++) {
+            if (audioBuffer[o] != audioBufferOriginal[o]) {
+              isEqual = false;
+              break;
+            }
+          }
+          
+          const wait = setTimeout(() => {
+            if ( ! isEqual) {
+              done();
+            } else {
+              done(new Error('isEqual ' + isEqual));
+            }
+          }, 1000);
         });
       });
+
     });
 
-    it('Test lowpass filter + findPeaksAtThresold at 1.1 (no peaks hit)', (done) => {
-      passLowPassFilter((source, err) => {
-        if (err) done(err);
-
-        const thresold = 1.10;
-        const offset = 0;
-
-        analyzer.findPeaksAtThresold(source.buffer.getChannelData(0), thresold, offset, (peaks, returnedThresold) => {
-          expect(peaks).to.be.equal(undefined);
-          expect(thresold).to.be.equal(returnedThresold);
-          done();
-        });
-      });
-    });
 
 
 	  it('Test onLoop function', (done) => {
@@ -189,4 +155,20 @@ describe('RealTime BPM Analyzer', () => {
 	    done();
 	  });
   });
+
+
+
+
+
+    /**
+   * Test Index functions
+      clearValidPeaks
+      evaluateValidPeaks
+      muteAnalyzer
+      stabilizeBPM
+      reloadAnalyzer
+      computeData
+      analyze
+   */
+  
 });

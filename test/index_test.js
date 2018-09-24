@@ -139,9 +139,27 @@ describe('RealTime BPM Analyzer', () => {
 
     });
 
+  });
 
+  
+
+  describe('CBA - Analyzer.findPeaksAtThresold', () => {
 
 	  it('Test onLoop function', (done) => {
+      // findPeaksAtThresold(data, thresold, *offset, *callback)
+      // -- EASY
+      // getTopCandidates(candidates)
+      // -- EASY
+      // identifyIntervals(peaks)
+      // -- MEDIUM
+      // groupByTempo(sampleRate)
+      // -- MEDIUM
+        // computeBPM(data, callback)
+        // -- HARD
+      done();
+    });
+
+    it('Test onLoop function', (done) => {
       // findPeaksAtThresold(data, thresold, *offset, *callback)
       // -- EASY
       // getTopCandidates(candidates)

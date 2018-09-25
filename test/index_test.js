@@ -38,22 +38,37 @@ describe('RealTime BPM Analyzer', () => {
      * Instanciate an audioContext
      */
     
-    const AudioContext = wae.RenderingAudioContext;
-    const context = new AudioContext();
+    const rAudioContext = new wae.RenderingAudioContext();
 
 
-    fs.readFile(__dirname + "/fixtures/bass-test.wav", (err, buffer) => {
+    fs.readFile(__dirname + "/fixtures/new_order-blue_monday.wav", (err, buffer) => {
       if (err) console.log(err);
+
+
 
       /**
        * Get AudioBuffer from buffer
        */
 
-      context.decodeAudioData(buffer).then((audioBuffer) => {
+      rAudioContext.decodeAudioData(buffer).then((audioBuffer) => {
 
-        callback && callback(null, audioBuffer, buffer);
+        const {length, numberOfChannels, sampleRate} = audioBuffer;
+        const context = new wae.OfflineAudioContext(numberOfChannels, length, sampleRate);
 
-      })
+        const audioBufferSourceNode = context.createBufferSource();
+        audioBufferSourceNode.buffer = audioBuffer;
+        audioBufferSourceNode.start(0);
+
+        // AudioBuffer
+        //   console.log(audioBuffer.constructor.name); 
+        // AudioBufferSourceNode
+        //   console.log(audioBufferSourceNode.constructor.name); 
+        // Buffer
+        //   console.log(buffer.constructor.name); 
+
+        return callback && callback(null, audioBufferSourceNode, audioBuffer, buffer);
+
+      });
 
     });
   }
@@ -62,13 +77,14 @@ describe('RealTime BPM Analyzer', () => {
 
   describe('CBA - _getFixtureAudioBuffer', () => {
 
-	  it('Should test the fixture (bass-test.wav) with _getFixtureAudioBuffer()', (done) => {
+	  it('Should test the fixture (new_order-blue_monday.wav) with _getFixtureAudioBuffer()', (done) => {
       
-      _getFixtureAudioBuffer((err, audioBuffer) => {
+      _getFixtureAudioBuffer((err, audioBufferSourceNode, audioBuffer, buffer) => {
 
         if (err) console.log(err);
 
-        expect(audioBuffer.length).to.be.equal(338688);
+        expect(audioBuffer.duration).to.be.equal(30); // Seconds
+        expect(audioBuffer.length).to.be.equal(1323000);
         expect(audioBuffer.sampleRate).to.be.equal(44100);
         expect(audioBuffer.constructor.name).to.be.equal('AudioBuffer');
 
@@ -89,8 +105,7 @@ describe('RealTime BPM Analyzer', () => {
       _getFixtureAudioBuffer((err, audioBuffer, buffer) => {
         if (err) console.log(err);
 
-        const OfflineAudioContext = wae.OfflineAudioContext;
-        const source = analyzer.getLowPassSource(buffer, OfflineAudioContext);
+        const source = analyzer.getLowPassSource(audioBuffer.buffer, wae.OfflineAudioContext);
 
         source.start(0);
 
@@ -103,29 +118,41 @@ describe('RealTime BPM Analyzer', () => {
 
     it('Should detect differences between original and lowered fixture', (done) => {
 
-      const OfflineAudioContext = wae.OfflineAudioContext;
+      _getFixtureAudioBuffer((err, audioBufferSourceNodeOriginal, audioBufferOriginal, bufferOriginal) => {
 
-      _getFixtureAudioBuffer((err, audioBufferOriginal, bufferOriginal) => {
-
-        _getFixtureAudioBuffer((err, audioBuffer, buffer) => {
+        _getFixtureAudioBuffer((err, audioBufferSourceNode, audioBuffer, buffer) => {
 
           if (err) console.log(err);
+
+          const rAudioContext = new wae.RenderingAudioContext();
+          const analyser = rAudioContext.createAnalyser();
+          audioBufferSourceNode.connect(analyser);
+          analyser.connect(rAudioContext.destination);
+
+
           
-          let source = analyzer.getLowPassSource(audioBuffer, OfflineAudioContext);
+          let source = analyzer.getLowPassSource(audioBuffer, wae.OfflineAudioContext);
 
           source.start(0);
 
-          audioBufferOriginal = audioBufferOriginal.getChannelData(0);
+          const sourceOriginal = audioBufferSourceNodeOriginal.buffer.getChannelData(0);
           source = source.buffer.getChannelData(0);
 
+
           let isEqual = true;
-          const audioBufferLength = audioBuffer.length;
+          const audioBufferLength = source.length;
           for (var o = 0; o < audioBufferLength; o++) {
-            if (audioBuffer[o] != audioBufferOriginal[o]) {
+            if (source[o] != sourceOriginal[o]) {
+              console.log(source[o], o);
+              console.log(source[o - 1], o);
               isEqual = false;
               break;
+            } else {
+              console.log(sourceOriginal[o], source[o]);
             }
           }
+
+          console.log(o);
           
           const wait = setTimeout(() => {
             if ( ! isEqual) {

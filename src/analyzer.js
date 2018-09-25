@@ -14,12 +14,15 @@ const analyzer = {};
 
 /**
  * Apply a low pass filter to an AudioBuffer
- * @param  {AudioBuffer}            buffer Source AudioBuffer
+ * @param  {AudioBuffer}            audioBuffer Source AudioBuffer
  * @return {AudioBufferSourceNode}
  */
 
-analyzer.getLowPassSource = function (buffer, OfflineAudioContext) {
-  const {length, numberOfChannels, sampleRate} = buffer;
+analyzer.getLowPassSource = function (audioBuffer, OfflineAudioContext) {
+
+  console.log(audioBuffer);
+
+  const {length, numberOfChannels, sampleRate} = audioBuffer;
   const context = new OfflineAudioContext(numberOfChannels, length, sampleRate);
 
   /**
@@ -27,7 +30,7 @@ analyzer.getLowPassSource = function (buffer, OfflineAudioContext) {
    */
 
   const source = context.createBufferSource();
-  source.buffer = buffer;
+  source.buffer = audioBuffer;
 
   /**
    * Create filter

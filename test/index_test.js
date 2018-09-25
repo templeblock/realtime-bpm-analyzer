@@ -128,8 +128,6 @@ describe('RealTime BPM Analyzer', () => {
           const analyser = rAudioContext.createAnalyser();
           audioBufferSourceNode.connect(analyser);
           analyser.connect(rAudioContext.destination);
-
-
           
           let source = analyzer.getLowPassSource(audioBuffer, wae.OfflineAudioContext);
 
